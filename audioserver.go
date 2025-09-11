@@ -1,35 +1,65 @@
-package main
+package audio
 
 import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"log"
-	"net"
 	"os"
 	"time"
 
 	"github.com/gordonklaus/portaudio"
-	"google.golang.org/grpc"
+	"go.viam.com/rdk/logging"
+	"go.viam.com/utils/rpc"
 
-	// Import audio drivers for macOS
-	_ "github.com/pion/mediadevices/pkg/driver/audiotest"
-	_ "github.com/pion/mediadevices/pkg/driver/microphone"
-
-	// Import codecs
+	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/robot"
 
 	pb "audiopoc/api/audio"
 )
 
-// var API = resource.APINamespace("olivia").WithServiceType("audio")
+var API = resource.APINamespace("olivia").WithServiceType("audio")
 
-// // Named is a helper for getting the named Audioout's typed resource name.
-// func Named(name string) resource.Name {
-// 	return resource.NewName(API, name)
-// }
+// Named is a helper for getting the named Audioout's typed resource name.
+func Named(name string) resource.Name {
+	return resource.NewName(API, name)
+}
+
+// FromRobot is a helper for getting the named Speech from the given Robot.
+func FromRobot(r robot.Robot, name string) (Audio, error) {
+	return robot.ResourceFromRobot[Audio](r, Named(name))
+}
+
+func init() {
+	resource.RegisterAPI(API, resource.APIRegistration[Audio]{
+		// Reconfigurable, and contents of reconfwrapper.go are only needed for standalone (non-module) uses.
+		RPCServiceServerConstructor: NewRPCServiceServer,
+		RPCServiceHandler:           nil, // No HTTP gateway handler needed
+		RPCServiceDesc:              &pb.AudioService_ServiceDesc,
+		RPCClient: func(
+			ctx context.Context,
+			conn rpc.ClientConn,
+			remoteName string,
+			name resource.Name,
+			logger logging.Logger,
+		) (Audio, error) {
+			return NewClientFromConn(conn, remoteName, name, logger), nil
+		},
+	})
+}
+
+type Audio interface {
+	resource.Resource
+	Record(ctx context.Context, durationSeconds int) (<-chan AudioChunk, error)
+}
 
 type audioServer struct {
 	pb.UnimplementedAudioServiceServer
+	coll resource.APIResourceCollection[Audio]
+}
+
+// NewRPCServiceServer returns a new RPC server for the Audio API.
+func NewRPCServiceServer(coll resource.APIResourceCollection[Audio]) interface{} {
+	return &audioServer{coll: coll}
 }
 
 // WAV header structure
@@ -69,34 +99,6 @@ func writeWAVHeader(file *os.File, sampleRate, channels, bitsPerSample uint16, d
 
 	return binary.Write(file, binary.LittleEndian, header)
 }
-
-// func FromRobot(r robot.Robot, name string) (Audio, error) {
-// 	return robot.ResourceFromRobot[Audioout](r, Named(name))
-// }
-
-// func init() {
-// 	resource.RegisterAPI(API, resource.APIRegistration[Audioout]{
-// 		// Reconfigurable, and contents of reconfwrapper.go are only needed for standalone (non-module) uses.
-// 		RPCServiceServerConstructor: NewRPCServiceServer,
-// 		RPCServiceHandler:           pb.RegisterAudiooutServiceHandlerFromEndpoint,
-// 		RPCServiceDesc:              &pb.AudiooutService_ServiceDesc,
-// 		RPCClient: func(
-// 			ctx context.Context,
-// 			conn rpc.ClientConn,
-// 			remoteName string,
-// 			name resource.Name,
-// 			logger golog.Logger,
-// 		) (Audioout, error) {
-// 			return NewClientFromConn(conn, remoteName, name, logger), nil
-// 		},
-// 	})
-// }
-
-// type Audioout interface {
-// 	resource.Resource
-// 	Play(ctx context.Context, file_path string, loop_count, maxtime_ms, fadein_ms int, block bool) error
-// 	Stop(ctx context.Context) error
-// }
 
 // lets pretend this is the module implementation for now
 
@@ -342,6 +344,9 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 	totalChunks := int(req.DurationSeconds) * chunksPerSecond
 	chunksSent := 0
 
+	// Handle continuous streaming (duration 0 means indefinite)
+	isInfinite := req.DurationSeconds <= 0
+
 	// Stream audio chunks
 	for {
 		select {
@@ -361,7 +366,7 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 			}
 
 			chunksSent++
-			if chunksSent >= totalChunks {
+			if !isInfinite && chunksSent >= totalChunks {
 				fmt.Printf("Recording complete. Sent %d audio chunks\n", chunksSent)
 				return nil
 			}
@@ -402,14 +407,99 @@ func newServer() *audioServer {
 	return &audioServer{}
 }
 
-func main() {
-	lis, err := net.Listen("tcp", "localhost:50051")
+type serviceClient struct {
+	resource.Named
+	resource.AlwaysRebuild
+	resource.TriviallyCloseable
+	client pb.AudioServiceClient
+	logger logging.Logger
+}
+
+// NewClientFromConn creates a new Speech RPC client from an existing connection.
+func NewClientFromConn(conn rpc.ClientConn, remoteName string, name resource.Name, logger logging.Logger) Audio {
+	sc := newSvcClientFromConn(conn, remoteName, name, logger)
+	return clientFromSvcClient(sc, name.ShortName())
+}
+
+func newSvcClientFromConn(conn rpc.ClientConn, remoteName string, name resource.Name, logger logging.Logger) *serviceClient {
+	client := pb.NewAudioServiceClient(conn)
+	sc := &serviceClient{
+		Named:  name.PrependRemote(remoteName).AsNamed(),
+		client: client,
+		logger: logger,
+	}
+	return sc
+}
+
+type audioClient struct {
+	*serviceClient
+	name string
+}
+
+func clientFromSvcClient(sc *serviceClient, name string) Audio {
+	return &audioClient{sc, name}
+}
+
+func (c *audioClient) Name() resource.Name {
+	return Named(c.name)
+}
+
+func (c *audioClient) Reconfigure(ctx context.Context, deps resource.Dependencies, conf resource.Config) error {
+	return nil
+}
+
+func (c *audioClient) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	return nil, nil
+}
+
+type AudioChunk struct {
+	Sequence  int64
+	AudioData []byte
+	Err       error // send errors through the channel
+}
+
+func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan AudioChunk, error) {
+	stream, err := c.client.Record(ctx, &pb.RecordRequest{
+		Name:            c.name,
+		DurationSeconds: int32(durationSeconds),
+		Format:          "pcm",
+		SampleRate:      44100,
+		Channels:        1,
+	})
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		return nil, err
 	}
 
-	grpcServer := grpc.NewServer()
-	pb.RegisterAudioServiceServer(grpcServer, newServer())
-	fmt.Println("serving....")
-	grpcServer.Serve(lis)
+	ch := make(chan AudioChunk)
+
+	// Receive and process audio chunks
+	go func() {
+		defer close(ch)
+		for {
+			chunk, err := stream.Recv()
+			if err != nil {
+				if err.Error() != "EOF" {
+					ch <- AudioChunk{Err: err} // propagate error
+				}
+				return
+			}
+
+			ch <- AudioChunk{
+				AudioData: chunk.AudioData,
+			}
+		}
+	}()
+	return ch, nil
 }
+
+// func main() {
+// 	lis, err := net.Listen("tcp", "localhost:50051")
+// 	if err != nil {
+// 		log.Fatalf("failed to listen: %v", err)
+// 	}
+
+// 	grpcServer := grpc.NewServer()
+// 	pb.RegisterAudioServiceServer(grpcServer, newServer())
+// 	fmt.Println("serving....")
+// 	grpcServer.Serve(lis)
+// }
