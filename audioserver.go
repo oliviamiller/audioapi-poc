@@ -49,7 +49,7 @@ func init() {
 
 type Audio interface {
 	resource.Resource
-	Record(ctx context.Context, durationSeconds int) (<-chan AudioChunk, error)
+	Record(ctx context.Context, durationSeconds int) (<-chan *AudioChunk, error)
 }
 
 type audioServer struct {
@@ -137,8 +137,9 @@ func (ac *AudioCapturer) StartCapture(ctx context.Context) (<-chan *pb.AudioChun
 		channels,            // input channels
 		0,                   // output channels (0 for input only)
 		float64(sampleRate), // sample rate
-		framesPerBuffer,     // frames per buffer
-		ac.buffer,           // buffer
+
+		framesPerBuffer, // frames per buffer
+		ac.buffer,       // buffer
 	)
 	if err != nil {
 		portaudio.Terminate()
@@ -458,7 +459,7 @@ type AudioChunk struct {
 	Err       error // send errors through the channel
 }
 
-func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan AudioChunk, error) {
+func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *AudioChunk, error) {
 	stream, err := c.client.Record(ctx, &pb.RecordRequest{
 		Name:            c.name,
 		DurationSeconds: int32(durationSeconds),
