@@ -332,12 +332,16 @@ func captureAudio(filename string, durationSeconds int) error {
 func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_RecordServer) error {
 	fmt.Printf("Starting audio recording stream for %d seconds\n", req.DurationSeconds)
 
-	// Get audio chunks from the factory function
-	chunkChan, errorChan, cleanup, err := GetAudioChunks(stream.Context())
+	// Get audio chunks from the resource
+	a, err := s.coll.Resource(req.Name)
 	if err != nil {
-		return fmt.Errorf("failed to start audio capture: %w", err)
+		return err
 	}
-	defer cleanup()
+
+	chunkChan, err := a.Record(stream.Context(), int(req.DurationSeconds))
+	if err != nil {
+		return err
+	}
 
 	// Calculate how many chunks to send (for duration limit)
 	const framesPerBuffer = 1024
@@ -361,8 +365,13 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 				return nil
 			}
 
+			// convert the chunk struct to a pb.audiochunk
+			audioChunk := &pb.AudioChunk{
+				AudioData: chunk.AudioData,
+			}
+
 			// Send chunk to client
-			if err := stream.Send(chunk); err != nil {
+			if err := stream.Send(audioChunk); err != nil {
 				return fmt.Errorf("failed to send audio chunk: %w", err)
 			}
 
@@ -372,11 +381,11 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 				return nil
 			}
 
-		case err, ok := <-errorChan:
-			if !ok {
-				fmt.Println("Audio capture error channel closed")
-				return nil
-			}
+			// case err, ok := <-errorChan:
+			// 	if !ok {
+			// 		fmt.Println("Audio capture error channel closed")
+			// 		return nil
+			// 	}
 			return fmt.Errorf("audio capture error: %w", err)
 		}
 	}
@@ -471,7 +480,7 @@ func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *
 		return nil, err
 	}
 
-	ch := make(chan AudioChunk)
+	ch := make(chan *AudioChunk)
 
 	// Receive and process audio chunks
 	go func() {
@@ -480,12 +489,12 @@ func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *
 			chunk, err := stream.Recv()
 			if err != nil {
 				if err.Error() != "EOF" {
-					ch <- AudioChunk{Err: err} // propagate error
+					ch <- &AudioChunk{Err: err} // propagate error
 				}
 				return
 			}
 
-			ch <- AudioChunk{
+			ch <- &AudioChunk{
 				AudioData: chunk.AudioData,
 			}
 		}
