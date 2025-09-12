@@ -17,7 +17,7 @@ import (
 	pb "audiopoc/api/audio"
 )
 
-var API = resource.APINamespace("olivia").WithServiceType("audio")
+var API = resource.APINamespace("olivia").WithComponentType("audio")
 
 // Named is a helper for getting the named Audioout's typed resource name.
 func Named(name string) resource.Name {
