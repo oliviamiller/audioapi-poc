@@ -14,7 +14,7 @@ import (
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/robot"
 
-	pb "audiopoc/api/audio"
+	pb "github.com/oliviamiller/audioapi-poc/api/api/audio"
 )
 
 var API = resource.APINamespace("olivia").WithComponentType("audio")
@@ -33,7 +33,7 @@ func init() {
 	resource.RegisterAPI(API, resource.APIRegistration[Audio]{
 		// Reconfigurable, and contents of reconfwrapper.go are only needed for standalone (non-module) uses.
 		RPCServiceServerConstructor: NewRPCServiceServer,
-		RPCServiceHandler:           nil, // No HTTP gateway handler needed
+		RPCServiceHandler:           pb.RegisterAudioServiceHandlerFromEndpoint,
 		RPCServiceDesc:              &pb.AudioService_ServiceDesc,
 		RPCClient: func(
 			ctx context.Context,
