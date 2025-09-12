@@ -386,7 +386,7 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 			// 		fmt.Println("Audio capture error channel closed")
 			// 		return nil
 			// 	}
-			return fmt.Errorf("audio capture error: %w", err)
+			//return fmt.Errorf("audio capture error: %w", err)
 		}
 	}
 }
