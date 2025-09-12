@@ -1,4 +1,4 @@
-module audiopoc
+module github.com/oliviamiller/audioapi-poc
 
 go 1.24.0
 
