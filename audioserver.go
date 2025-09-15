@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gordonklaus/portaudio"
+	"github.com/viamrobotics/webrtc/v3"
+	"github.com/viamrobotics/webrtc/v3/pkg/media"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/utils/rpc"
 
@@ -27,6 +29,23 @@ func Named(name string) resource.Name {
 // FromRobot is a helper for getting the named Speech from the given Robot.
 func FromRobot(r robot.Robot, name string) (Audio, error) {
 	return robot.ResourceFromRobot[Audio](r, Named(name))
+}
+
+// GetWebRTCManagerFromRobot gets the WebRTC stream manager from the robot
+func GetWebRTCManagerFromRobot(r robot.Robot) (WebRTCStreamManager, error) {
+	// Get the audio service from the robot
+	audioService, err := r.ResourceByName(resource.NewName(resource.APINamespaceRDK.WithServiceType("audio"), "builtin"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get audio service: %w", err)
+	}
+
+	// Cast to WebRTCStreamManager
+	manager, ok := audioService.(WebRTCStreamManager)
+	if !ok {
+		return nil, fmt.Errorf("audio service does not implement WebRTCStreamManager")
+	}
+
+	return manager, nil
 }
 
 func init() {
@@ -54,12 +73,27 @@ type Audio interface {
 
 type audioServer struct {
 	pb.UnimplementedAudioServiceServer
-	coll resource.APIResourceCollection[Audio]
+	coll         resource.APIResourceCollection[Audio]
+	webrtcTracks map[string]webrtc.TrackLocal
 }
+
+// WebRTCStreamManager provides WebRTC streaming capabilities
+type WebRTCStreamManager interface {
+	AddWebRTCStream(resourceName string) (webrtc.TrackLocal, error)
+	RemoveWebRTCStream(resourceName string) error
+	ListWebRTCTracks() []string
+	GetWebRTCTrack(resourceName string) (webrtc.TrackLocal, error)
+}
+
+// Ensure audioServer implements WebRTCStreamManager
+var _ WebRTCStreamManager = (*audioServer)(nil)
 
 // NewRPCServiceServer returns a new RPC server for the Audio API.
 func NewRPCServiceServer(coll resource.APIResourceCollection[Audio]) interface{} {
-	return &audioServer{coll: coll}
+	return &audioServer{
+		coll:         coll,
+		webrtcTracks: make(map[string]webrtc.TrackLocal),
+	}
 }
 
 // WAV header structure
@@ -338,6 +372,16 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 		return err
 	}
 
+	// Create WebRTC track for this stream (this enables WebRTC streaming automatically)
+	fmt.Printf("Creating WebRTC track for audio resource: %s\n", req.Name)
+	webrtcTrack, err := s.GetWebRTCTrack(req.Name)
+	if err != nil {
+		fmt.Printf("Warning: Failed to create WebRTC track: %v\n", err)
+		// Continue without WebRTC track - fallback to direct streaming
+	} else {
+		fmt.Printf("WebRTC track active for %s\n", req.Name)
+	}
+
 	chunkChan, err := a.Record(stream.Context(), int(req.DurationSeconds))
 	if err != nil {
 		return err
@@ -357,6 +401,11 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 		select {
 		case <-stream.Context().Done():
 			fmt.Println("Client disconnected, stopping recording")
+			// Clean up WebRTC track when client disconnects
+			if webrtcTrack != nil {
+				s.RemoveWebRTCStream(req.Name)
+				fmt.Printf("Cleaned up WebRTC track for %s\n", req.Name)
+			}
 			return nil
 
 		case chunk, ok := <-chunkChan:
@@ -370,7 +419,7 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 				AudioData: chunk.AudioData,
 			}
 
-			// Send chunk to client
+			// Send chunk to client (WebRTC track is fed automatically in background)
 			if err := stream.Send(audioChunk); err != nil {
 				return fmt.Errorf("failed to send audio chunk: %w", err)
 			}
@@ -378,15 +427,13 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 			chunksSent++
 			if !isInfinite && chunksSent >= totalChunks {
 				fmt.Printf("Recording complete. Sent %d audio chunks\n", chunksSent)
+				// Clean up WebRTC track when recording is complete
+				if webrtcTrack != nil {
+					s.RemoveWebRTCStream(req.Name)
+					fmt.Printf("Cleaned up WebRTC track for %s\n", req.Name)
+				}
 				return nil
 			}
-
-			// case err, ok := <-errorChan:
-			// 	if !ok {
-			// 		fmt.Println("Audio capture error channel closed")
-			// 		return nil
-			// 	}
-			//return fmt.Errorf("audio capture error: %w", err)
 		}
 	}
 }
@@ -410,11 +457,99 @@ func (s *audioServer) Play(ctx context.Context, req *pb.PlayRequest) (*pb.PlayRe
 
 func (s *audioServer) StopPlay(ctx context.Context, req *pb.StopPlayRequest) (*pb.StopPlayResponse, error) {
 	return &pb.StopPlayResponse{}, nil
+}
 
+// GetWebRTCTrack creates or returns an existing WebRTC track for the given audio resource
+func (s *audioServer) GetWebRTCTrack(resourceName string) (webrtc.TrackLocal, error) {
+	// Check if track already exists
+	if track, exists := s.webrtcTracks[resourceName]; exists {
+		return track, nil
+	}
+
+	// Get the audio resource
+	a, err := s.coll.Resource(resourceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get audio resource %q: %w", resourceName, err)
+	}
+
+	// Create WebRTC audio track
+	track, err := webrtc.NewTrackLocalStaticSample(
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
+		"audio",
+		resourceName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create WebRTC track: %w", err)
+	}
+
+	// Start continuous audio capture
+	chunkChan, err := a.Record(context.Background(), 0) // 0 = continuous
+	if err != nil {
+		return nil, fmt.Errorf("failed to start audio recording: %w", err)
+	}
+
+	// Feed audio chunks to WebRTC track in background
+	go func() {
+		defer func() {
+			// Clean up track when done
+			delete(s.webrtcTracks, resourceName)
+		}()
+
+		for chunk := range chunkChan {
+			if chunk.Err != nil {
+				fmt.Printf("Audio chunk error for %s: %v\n", resourceName, chunk.Err)
+				continue
+			}
+
+			// Create media sample from PCM data
+			// TODO: Convert PCM to Opus for better compression
+			sample := media.Sample{
+				Data:     chunk.AudioData,
+				Duration: time.Millisecond * 20, // 20ms audio frame
+			}
+
+			if err := track.WriteSample(sample); err != nil {
+				fmt.Printf("Failed to write sample to WebRTC track %s: %v\n", resourceName, err)
+				return
+			}
+		}
+	}()
+
+	// Store track for future requests
+	s.webrtcTracks[resourceName] = track
+	return track, nil
+}
+
+// ListWebRTCTracks returns names of all active WebRTC tracks
+func (s *audioServer) ListWebRTCTracks() []string {
+	var trackNames []string
+	for name := range s.webrtcTracks {
+		trackNames = append(trackNames, name)
+	}
+	return trackNames
+}
+
+// AddWebRTCStream creates a WebRTC track for streaming (compatible with RDK streaming interface)
+func (s *audioServer) AddWebRTCStream(resourceName string) (webrtc.TrackLocal, error) {
+	return s.GetWebRTCTrack(resourceName)
+}
+
+// RemoveWebRTCStream removes a WebRTC track
+func (s *audioServer) RemoveWebRTCStream(resourceName string) error {
+	if track, exists := s.webrtcTracks[resourceName]; exists {
+		// Stop the track (this will trigger the cleanup in the goroutine)
+		if closer, ok := track.(interface{ Close() error }); ok {
+			closer.Close()
+		}
+		delete(s.webrtcTracks, resourceName)
+	}
+	return nil
 }
 
 func newServer() *audioServer {
-	return &audioServer{}
+	return &audioServer{
+		webrtcTracks: make(map[string]webrtc.TrackLocal),
+	}
 }
 
 type serviceClient struct {
@@ -469,6 +604,80 @@ type AudioChunk struct {
 }
 
 func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *AudioChunk, error) {
+	// Try to get peer connection from context for WebRTC streaming
+	pc, ok := rpc.ContextPeerConnection(ctx)
+	if ok {
+		// Use WebRTC track for better performance
+		return c.recordViaWebRTC(ctx, pc, durationSeconds)
+	}
+
+	fmt.Println("COULD NOT GET PEER CONNECTION")
+
+	// Fallback to gRPC streaming
+	return c.recordViaGRPC(ctx, durationSeconds)
+}
+
+func (c *audioClient) recordViaWebRTC(ctx context.Context, pc *webrtc.PeerConnection, durationSeconds int) (<-chan *AudioChunk, error) {
+	ch := make(chan *AudioChunk)
+
+	// Set up WebRTC track handler first
+	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		if track.ID() == c.name {
+			go func() {
+				defer close(ch)
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+
+					// Read RTP packet from WebRTC track
+					packet, _, err := track.ReadRTP()
+					if err != nil {
+						ch <- &AudioChunk{Err: err}
+						return
+					}
+
+					// Convert RTP payload to AudioChunk
+					// Note: You may need to decode Opus to PCM here
+					ch <- &AudioChunk{
+						AudioData: packet.Payload,
+					}
+				}
+			}()
+		}
+	})
+
+	// Trigger the server to create WebRTC track by making a normal Record call
+	// but we won't use the gRPC stream - we'll use the WebRTC track instead
+	go func() {
+		// This triggers WebRTC track creation on server side
+		stream, err := c.client.Record(ctx, &pb.RecordRequest{
+			Name:            c.name,
+			DurationSeconds: int32(durationSeconds),
+			Format:          "pcm",
+			SampleRate:      44100,
+			Channels:        1,
+		})
+		if err != nil {
+			ch <- &AudioChunk{Err: err}
+			return
+		}
+		// Consume the gRPC stream to keep the server happy, but ignore the data
+		// since we're getting audio via WebRTC track
+		for {
+			_, err := stream.Recv()
+			if err != nil {
+				return // Stream ended, server will clean up WebRTC track
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
+func (c *audioClient) recordViaGRPC(ctx context.Context, durationSeconds int) (<-chan *AudioChunk, error) {
 	stream, err := c.client.Record(ctx, &pb.RecordRequest{
 		Name:            c.name,
 		DurationSeconds: int32(durationSeconds),

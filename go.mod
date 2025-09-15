@@ -6,8 +6,11 @@ toolchain go1.24.7
 
 require (
 	github.com/gordonklaus/portaudio v0.0.0-20250206071425-98a94950218b
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2
+	github.com/viamrobotics/webrtc/v3 v3.99.16
 	go.viam.com/rdk v0.92.0
 	go.viam.com/utils v0.1.166
+	google.golang.org/genproto/googleapis/api v0.0.0-20250908214217-97024824d090
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.9
 )
@@ -70,7 +73,6 @@ require (
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect
 	github.com/improbable-eng/grpc-web v0.15.0 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.6.8 // indirect
 	github.com/jhump/protoreflect v1.17.0 // indirect
@@ -117,7 +119,6 @@ require (
 	github.com/srikrsna/protoc-gen-gotag v1.0.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/viamrobotics/ice/v2 v2.3.39 // indirect
-	github.com/viamrobotics/webrtc/v3 v3.99.16 // indirect
 	github.com/viamrobotics/zeroconf v1.0.12 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
@@ -160,7 +161,6 @@ require (
 	gonum.org/v1/plot v0.16.0 // indirect
 	google.golang.org/api v0.249.0 // indirect
 	google.golang.org/genproto v0.0.0-20250908214217-97024824d090 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250908214217-97024824d090 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
