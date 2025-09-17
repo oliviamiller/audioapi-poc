@@ -50,6 +50,7 @@ func init() {
 type Audio interface {
 	resource.Resource
 	Record(ctx context.Context, durationSeconds int) (<-chan *AudioChunk, error)
+	Play(ctx context.Context, audio []byte, format pb.FileFormat, sampleRate int, channles int) error
 }
 
 type audioServer struct {
@@ -252,83 +253,6 @@ func GetAudioChunks(ctx context.Context) (<-chan *pb.AudioChunk, <-chan error, f
 	return chunkChan, errorChan, cleanup, nil
 }
 
-func captureAudio(filename string, durationSeconds int) error {
-	fmt.Println("trying to capture audio")
-
-	// Initialize PortAudio
-	if err := portaudio.Initialize(); err != nil {
-		return fmt.Errorf("failed to initialize PortAudio: %w", err)
-	}
-	defer portaudio.Terminate()
-
-	// Audio parameters
-	const framesPerBuffer = 1024
-	const channels = 1 // Mono recording
-
-	// Buffer to hold audio samples
-	buffer := make([]float32, framesPerBuffer*channels)
-	var recordedSamples []float32
-
-	// Open input stream
-	stream, err := portaudio.OpenDefaultStream(
-		channels,            // input channels
-		0,                   // output channels (0 for input only)
-		float64(sampleRate), // sample rate
-		framesPerBuffer,     // frames per buffer
-		buffer,              // buffer
-	)
-	if err != nil {
-		return fmt.Errorf("failed to open stream: %w", err)
-	}
-	defer stream.Close()
-
-	if err := stream.Start(); err != nil {
-		return fmt.Errorf("failed to start stream: %w", err)
-	}
-	fmt.Println("recording audio...")
-
-	// Calculate number of reads needed
-	numReads := (sampleRate * durationSeconds) / framesPerBuffer
-	for i := 0; i < numReads; i++ {
-		if err := stream.Read(); err != nil {
-			return fmt.Errorf("failed to read stream: %w", err)
-		}
-		recordedSamples = append(recordedSamples, buffer...)
-	}
-
-	fmt.Println("stopping stream...")
-	if err := stream.Stop(); err != nil {
-		return fmt.Errorf("failed to stop stream: %w", err)
-	}
-
-	// Create output file
-	file, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer file.Close()
-
-	// Write raw audio data as 16-bit PCM
-	for _, sample := range recordedSamples {
-		if sample != 0.0 {
-		}
-		// Clamp sample to valid range
-		if sample > 1.0 {
-			sample = 1.0
-		} else if sample < -1.0 {
-			sample = -1.0
-		}
-		// Convert float32 to int16
-		intSample := int16(sample * 32767.0)
-		if err := binary.Write(file, binary.LittleEndian, intSample); err != nil {
-			return fmt.Errorf("failed to write sample: %w", err)
-		}
-	}
-
-	fmt.Printf("Recorded %d samples to %s\n", len(recordedSamples), filename)
-	return nil
-}
-
 func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_RecordServer) error {
 	fmt.Printf("Starting audio recording stream for %d seconds\n", req.DurationSeconds)
 
@@ -391,25 +315,17 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 	}
 }
 
-func (s *audioServer) StopRecord(ctx context.Context, req *pb.StopRecordRequest) (*pb.StopRecordResponse, error) {
-	// g, err := s.coll.Resource(req.Name)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// err = g.Play(ctx, req.file_path)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	return &pb.StopRecordResponse{}, nil
-
-}
-
 func (s *audioServer) Play(ctx context.Context, req *pb.PlayRequest) (*pb.PlayResponse, error) {
-	return &pb.PlayResponse{}, nil
-}
+	a, err := s.coll.Resource(req.Name)
+	if err != nil {
+		return nil, err
+	}
 
-func (s *audioServer) StopPlay(ctx context.Context, req *pb.StopPlayRequest) (*pb.StopPlayResponse, error) {
-	return &pb.StopPlayResponse{}, nil
+	err = a.Play(ctx, req.AudioData, req.Format, int(req.SampleRate), int(req.Channels))
+	if err != nil {
+		return nil, err
+	}
+	return &pb.PlayResponse{Name: req.Name}, nil
 
 }
 
@@ -500,6 +416,23 @@ func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *
 		}
 	}()
 	return ch, nil
+}
+
+func (c *audioClient) Play(ctx context.Context, audio []byte, format pb.FileFormat, sampleRate int, channels int) error {
+	_, err := c.client.Play(ctx, &pb.PlayRequest{
+		Name:       c.name,
+		AudioData:  audio,
+		Format:     format,
+		SampleRate: int32(sampleRate),
+		Channels:   int32(channels),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 // func main() {

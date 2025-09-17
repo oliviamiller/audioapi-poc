@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             (unknown)
-// source: api/audio/audio.proto
+// source: api/api/audio/audio.proto
 
 package audio
 
@@ -19,10 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	AudioService_Play_FullMethodName       = "/olivia.service.audio.v1.AudioService/Play"
-	AudioService_StopPlay_FullMethodName   = "/olivia.service.audio.v1.AudioService/StopPlay"
-	AudioService_Record_FullMethodName     = "/olivia.service.audio.v1.AudioService/Record"
-	AudioService_StopRecord_FullMethodName = "/olivia.service.audio.v1.AudioService/StopRecord"
+	AudioService_Play_FullMethodName   = "/AudioService/Play"
+	AudioService_Record_FullMethodName = "/AudioService/Record"
 )
 
 // AudioServiceClient is the client API for AudioService service.
@@ -30,9 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AudioServiceClient interface {
 	Play(ctx context.Context, in *PlayRequest, opts ...grpc.CallOption) (*PlayResponse, error)
-	StopPlay(ctx context.Context, in *StopPlayRequest, opts ...grpc.CallOption) (*StopPlayResponse, error)
 	Record(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (AudioService_RecordClient, error)
-	StopRecord(ctx context.Context, in *StopRecordRequest, opts ...grpc.CallOption) (*StopRecordResponse, error)
 }
 
 type audioServiceClient struct {
@@ -46,15 +42,6 @@ func NewAudioServiceClient(cc grpc.ClientConnInterface) AudioServiceClient {
 func (c *audioServiceClient) Play(ctx context.Context, in *PlayRequest, opts ...grpc.CallOption) (*PlayResponse, error) {
 	out := new(PlayResponse)
 	err := c.cc.Invoke(ctx, AudioService_Play_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *audioServiceClient) StopPlay(ctx context.Context, in *StopPlayRequest, opts ...grpc.CallOption) (*StopPlayResponse, error) {
-	out := new(StopPlayResponse)
-	err := c.cc.Invoke(ctx, AudioService_StopPlay_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -93,23 +80,12 @@ func (x *audioServiceRecordClient) Recv() (*AudioChunk, error) {
 	return m, nil
 }
 
-func (c *audioServiceClient) StopRecord(ctx context.Context, in *StopRecordRequest, opts ...grpc.CallOption) (*StopRecordResponse, error) {
-	out := new(StopRecordResponse)
-	err := c.cc.Invoke(ctx, AudioService_StopRecord_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AudioServiceServer is the server API for AudioService service.
 // All implementations must embed UnimplementedAudioServiceServer
 // for forward compatibility
 type AudioServiceServer interface {
 	Play(context.Context, *PlayRequest) (*PlayResponse, error)
-	StopPlay(context.Context, *StopPlayRequest) (*StopPlayResponse, error)
 	Record(*RecordRequest, AudioService_RecordServer) error
-	StopRecord(context.Context, *StopRecordRequest) (*StopRecordResponse, error)
 	mustEmbedUnimplementedAudioServiceServer()
 }
 
@@ -120,14 +96,8 @@ type UnimplementedAudioServiceServer struct {
 func (UnimplementedAudioServiceServer) Play(context.Context, *PlayRequest) (*PlayResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Play not implemented")
 }
-func (UnimplementedAudioServiceServer) StopPlay(context.Context, *StopPlayRequest) (*StopPlayResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StopPlay not implemented")
-}
 func (UnimplementedAudioServiceServer) Record(*RecordRequest, AudioService_RecordServer) error {
 	return status.Errorf(codes.Unimplemented, "method Record not implemented")
-}
-func (UnimplementedAudioServiceServer) StopRecord(context.Context, *StopRecordRequest) (*StopRecordResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StopRecord not implemented")
 }
 func (UnimplementedAudioServiceServer) mustEmbedUnimplementedAudioServiceServer() {}
 
@@ -160,24 +130,6 @@ func _AudioService_Play_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AudioService_StopPlay_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StopPlayRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AudioServiceServer).StopPlay(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AudioService_StopPlay_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AudioServiceServer).StopPlay(ctx, req.(*StopPlayRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AudioService_Record_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(RecordRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -199,42 +151,16 @@ func (x *audioServiceRecordServer) Send(m *AudioChunk) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _AudioService_StopRecord_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StopRecordRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AudioServiceServer).StopRecord(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AudioService_StopRecord_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AudioServiceServer).StopRecord(ctx, req.(*StopRecordRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AudioService_ServiceDesc is the grpc.ServiceDesc for AudioService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var AudioService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "olivia.service.audio.v1.AudioService",
+	ServiceName: "AudioService",
 	HandlerType: (*AudioServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Play",
 			Handler:    _AudioService_Play_Handler,
-		},
-		{
-			MethodName: "StopPlay",
-			Handler:    _AudioService_StopPlay_Handler,
-		},
-		{
-			MethodName: "StopRecord",
-			Handler:    _AudioService_StopRecord_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -244,5 +170,5 @@ var AudioService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "api/audio/audio.proto",
+	Metadata: "api/api/audio/audio.proto",
 }
