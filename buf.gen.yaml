@@ -9,3 +9,9 @@ plugins:
   - name: grpc-gateway
     out: .
     opt: paths=source_relative
+  - plugin: buf.build/protocolbuffers/python:v29.2
+    out: .
+  - name: grpclib_python
+    out: .
+  - plugin: buf.build/community/nipunn1313-mypy
+    out: .

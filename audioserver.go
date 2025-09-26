@@ -2,19 +2,15 @@ package audio
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
-	"os"
-	"time"
 
-	"github.com/gordonklaus/portaudio"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/utils/rpc"
 
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/robot"
 
-	pb "github.com/oliviamiller/audioapi-poc/api/api/audio"
+	pb "github.com/oliviamiller/audioapi-poc/grpc"
 )
 
 var API = resource.APINamespace("olivia").WithComponentType("audio")
@@ -24,7 +20,6 @@ func Named(name string) resource.Name {
 	return resource.NewName(API, name)
 }
 
-// FromRobot is a helper for getting the named Speech from the given Robot.
 func FromRobot(r robot.Robot, name string) (Audio, error) {
 	return robot.ResourceFromRobot[Audio](r, Named(name))
 }
@@ -47,10 +42,30 @@ func init() {
 	})
 }
 
+type AudioFormat int
+
+const (
+	Pcm16 AudioFormat = iota
+	Pcm32
+	Pcm32Float
+	Mp3
+)
+
+type AudioInfo struct {
+	Format     AudioFormat
+	SampleRate int
+	Channels   int
+}
+
+type Properties struct {
+	SupportedFormats []AudioFormat
+	maxChannels      int
+}
+
 type Audio interface {
 	resource.Resource
-	Record(ctx context.Context, durationSeconds int) (<-chan *AudioChunk, error)
-	Play(ctx context.Context, audio []byte, format pb.FileFormat, sampleRate int, channles int) error
+	Record(ctx context.Context, info AudioInfo, durationSeconds int) (<-chan *AudioChunk, error)
+	Play(ctx context.Context, audio []byte, format pb.AudioFormat, sampleRate int, channels int) error
 }
 
 type audioServer struct {
@@ -80,177 +95,18 @@ type wavHeader struct {
 	Subchunk2Size uint32  // Size of data
 }
 
-// writeWAVHeader writes a WAV header to the file
-func writeWAVHeader(file *os.File, sampleRate, channels, bitsPerSample uint16, dataSize uint32) error {
-	header := wavHeader{
-		ChunkID:       [4]byte{'R', 'I', 'F', 'F'},
-		ChunkSize:     36 + dataSize,
-		Format:        [4]byte{'W', 'A', 'V', 'E'},
-		Subchunk1ID:   [4]byte{'f', 'm', 't', ' '},
-		Subchunk1Size: 16,
-		AudioFormat:   1, // PCM
-		NumChannels:   channels,
-		SampleRate:    uint32(sampleRate),
-		ByteRate:      uint32(sampleRate) * uint32(channels) * uint32(bitsPerSample) / 8,
-		BlockAlign:    channels * bitsPerSample / 8,
-		BitsPerSample: bitsPerSample,
-		Subchunk2ID:   [4]byte{'d', 'a', 't', 'a'},
-		Subchunk2Size: dataSize,
-	}
-
-	return binary.Write(file, binary.LittleEndian, header)
+var PbToGoFormat = map[pb.AudioFormat]AudioFormat{
+	pb.AudioFormat_PCM16:       Pcm16,
+	pb.AudioFormat_PCM32:       Pcm32,
+	pb.AudioFormat_PCM32_FLOAT: Pcm32Float,
+	pb.AudioFormat_MP3:         Mp3,
 }
 
-// lets pretend this is the module implementation for now
-
-const sampleRate = 44100
-
-// AudioCapturer handles audio capture and streaming via channels
-type AudioCapturer struct {
-	stream    *portaudio.Stream
-	buffer    []float32
-	sequence  int32
-	isRunning bool
-}
-
-// NewAudioCapturer creates a new audio capturer
-func NewAudioCapturer() *AudioCapturer {
-	return &AudioCapturer{}
-}
-
-// StartCapture initializes audio capture and returns a channel of audio chunks
-func (ac *AudioCapturer) StartCapture(ctx context.Context) (<-chan *pb.AudioChunk, <-chan error, error) {
-	// Initialize PortAudio
-	if err := portaudio.Initialize(); err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize PortAudio: %w", err)
-	}
-
-	// Audio parameters
-	const framesPerBuffer = 1024
-	const channels = 1 // Mono recording
-
-	// Buffer to hold audio samples
-	ac.buffer = make([]float32, framesPerBuffer*channels)
-
-	// Open input stream
-	var err error
-	ac.stream, err = portaudio.OpenDefaultStream(
-		channels,            // input channels
-		0,                   // output channels (0 for input only)
-		float64(sampleRate), // sample rate
-
-		framesPerBuffer, // frames per buffer
-		ac.buffer,       // buffer
-	)
-	if err != nil {
-		portaudio.Terminate()
-		return nil, nil, fmt.Errorf("failed to open stream: %w", err)
-	}
-
-	if err := ac.stream.Start(); err != nil {
-		ac.stream.Close()
-		portaudio.Terminate()
-		return nil, nil, fmt.Errorf("failed to start stream: %w", err)
-	}
-
-	ac.sequence = 0
-	ac.isRunning = true
-
-	// Create channels for audio chunks and errors
-	chunkChan := make(chan *pb.AudioChunk, 10) // Buffer for smoother streaming
-	errorChan := make(chan error, 1)
-
-	// Start goroutine to capture audio
-	go ac.captureLoop(ctx, chunkChan, errorChan)
-
-	return chunkChan, errorChan, nil
-}
-
-// captureLoop runs the audio capture loop
-func (ac *AudioCapturer) captureLoop(ctx context.Context, chunkChan chan<- *pb.AudioChunk, errorChan chan<- error) {
-	defer func() {
-		close(chunkChan)
-		close(errorChan)
-		ac.Stop()
-	}()
-
-	for ac.isRunning {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		// Read audio data
-		if err := ac.stream.Read(); err != nil {
-			select {
-			case errorChan <- fmt.Errorf("failed to read stream: %w", err):
-			case <-ctx.Done():
-			}
-			return
-		}
-
-		// Convert float32 samples to int16 PCM bytes
-		pcmData := make([]byte, len(ac.buffer)*2) // 2 bytes per int16 sample
-		for i, sample := range ac.buffer {
-			// Clamp sample to valid range
-			if sample > 1.0 {
-				sample = 1.0
-			} else if sample < -1.0 {
-				sample = -1.0
-			}
-			// Convert float32 to int16
-			intSample := int16(sample * 32767.0)
-			// Write as little-endian bytes
-			pcmData[i*2] = byte(intSample & 0xFF)
-			pcmData[i*2+1] = byte((intSample >> 8) & 0xFF)
-		}
-
-		// Create audio chunk
-		chunk := &pb.AudioChunk{
-			AudioData: pcmData,
-			Timestamp: time.Now().UnixMicro(),
-			Sequence:  ac.sequence,
-		}
-
-		ac.sequence++
-
-		// Send chunk to channel
-		select {
-		case chunkChan <- chunk:
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// Stop stops the audio capture
-func (ac *AudioCapturer) Stop() {
-	ac.isRunning = false
-	if ac.stream != nil {
-		ac.stream.Stop()
-		ac.stream.Close()
-		ac.stream = nil
-	}
-	portaudio.Terminate()
-}
-
-// GetAudioChunks is a factory function that can be used to get audio chunks from any source
-// This makes it easy to replace the implementation later (e.g., reading from another process)
-func GetAudioChunks(ctx context.Context) (<-chan *pb.AudioChunk, <-chan error, func(), error) {
-	capturer := NewAudioCapturer()
-
-	chunkChan, errorChan, err := capturer.StartCapture(ctx)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Return cleanup function
-	cleanup := func() {
-		capturer.Stop()
-	}
-
-	return chunkChan, errorChan, cleanup, nil
+var GoToPbFormat = map[AudioFormat]pb.AudioFormat{
+	Pcm16:      pb.AudioFormat_PCM16,
+	Pcm32:      pb.AudioFormat_PCM32,
+	Pcm32Float: pb.AudioFormat_PCM32_FLOAT,
+	Mp3:        pb.AudioFormat_MP3,
 }
 
 func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_RecordServer) error {
@@ -262,19 +118,14 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 		return err
 	}
 
-	chunkChan, err := a.Record(stream.Context(), int(req.DurationSeconds))
+	chunkChan, err := a.Record(stream.Context(), AudioInfo{
+		Format:     PbToGoFormat[req.Info.Format],
+		Channels:   int(req.Info.Channels),
+		SampleRate: int(req.Info.SampleRate)},
+		int(req.DurationSeconds))
 	if err != nil {
 		return err
 	}
-
-	// Calculate how many chunks to send (for duration limit)
-	const framesPerBuffer = 1024
-	chunksPerSecond := sampleRate / framesPerBuffer
-	totalChunks := int(req.DurationSeconds) * chunksPerSecond
-	chunksSent := 0
-
-	// Handle continuous streaming (duration 0 means indefinite)
-	isInfinite := req.DurationSeconds <= 0
 
 	// Stream audio chunks
 	for {
@@ -288,7 +139,9 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 				fmt.Println("Audio capture channel closed")
 				return nil
 			}
-
+			if chunk.Err != nil {
+				return fmt.Errorf("audio capture error: %w", err)
+			}
 			// convert the chunk struct to a pb.audiochunk
 			audioChunk := &pb.AudioChunk{
 				AudioData: chunk.AudioData,
@@ -298,19 +151,6 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 			if err := stream.Send(audioChunk); err != nil {
 				return fmt.Errorf("failed to send audio chunk: %w", err)
 			}
-
-			chunksSent++
-			if !isInfinite && chunksSent >= totalChunks {
-				fmt.Printf("Recording complete. Sent %d audio chunks\n", chunksSent)
-				return nil
-			}
-
-			// case err, ok := <-errorChan:
-			// 	if !ok {
-			// 		fmt.Println("Audio capture error channel closed")
-			// 		return nil
-			// 	}
-			//return fmt.Errorf("audio capture error: %w", err)
 		}
 	}
 }
@@ -325,7 +165,22 @@ func (s *audioServer) Play(ctx context.Context, req *pb.PlayRequest) (*pb.PlayRe
 	if err != nil {
 		return nil, err
 	}
-	return &pb.PlayResponse{Name: req.Name}, nil
+	return &pb.PlayResponse{}, nil
+
+}
+
+func (s *audioServer) Properties(ctx context.Context, req *pb.PropertiesRequest) (*pb.PropertiesResponse, error) {
+	// a, err := s.coll.Resource(req.Name)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// props, err := a.Properties(ctx)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	return &pb.PropertiesResponse{}, nil
+	// return &pb.PropertiesResponse{SupportedFormats: props.SupportedFormats, Channels: int32(props.maxChannels)}, nil
 
 }
 
@@ -384,14 +239,15 @@ type AudioChunk struct {
 	Err       error // send errors through the channel
 }
 
-func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *AudioChunk, error) {
+func (c *audioClient) Record(ctx context.Context, info AudioInfo, durationSeconds int) (<-chan *AudioChunk, error) {
 	stream, err := c.client.Record(ctx, &pb.RecordRequest{
 		Name:            c.name,
 		DurationSeconds: int32(durationSeconds),
-		Format:          "pcm",
-		SampleRate:      44100,
-		Channels:        1,
-	})
+		Info: &pb.AudioInfo{
+			Format:     GoToPbFormat[info.Format],
+			SampleRate: int32(info.SampleRate),
+			Channels:   int32(info.Channels),
+		}})
 	if err != nil {
 		return nil, err
 	}
@@ -407,6 +263,7 @@ func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *
 				if err.Error() != "EOF" {
 					ch <- &AudioChunk{Err: err} // propagate error
 				}
+				fmt.Println("backgorund routine returning")
 				return
 			}
 
@@ -415,10 +272,12 @@ func (c *audioClient) Record(ctx context.Context, durationSeconds int) (<-chan *
 			}
 		}
 	}()
+
+	fmt.Println("client is returning")
 	return ch, nil
 }
 
-func (c *audioClient) Play(ctx context.Context, audio []byte, format pb.FileFormat, sampleRate int, channels int) error {
+func (c *audioClient) Play(ctx context.Context, audio []byte, format pb.AudioFormat, sampleRate int, channels int) error {
 	_, err := c.client.Play(ctx, &pb.PlayRequest{
 		Name:       c.name,
 		AudioData:  audio,
@@ -434,6 +293,18 @@ func (c *audioClient) Play(ctx context.Context, audio []byte, format pb.FileForm
 	return nil
 
 }
+
+// func (c *audioClient) Properties(ctx context.Context) error {
+// 	props, err := c.client.Properties(ctx, &pb.PropertiesRequest{
+// 		Name: c.name,
+// 	})
+
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	return props, err
+// }
 
 // func main() {
 // 	lis, err := net.Listen("tcp", "localhost:50051")
