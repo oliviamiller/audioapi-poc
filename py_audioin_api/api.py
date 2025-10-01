@@ -22,7 +22,7 @@ class Audio(ComponentBase):
     API = API("olivia", RESOURCE_TYPE_COMPONENT, "audio")
 
     @abc.abstractmethod
-    async def GetAudio(self, format: str, sampleRate: int, channels:int, durationSeconds: int, maxDurationSeconds: int, previousTimestamp:int) -> AudioStream: ...
+    async def get_audio(self, format: str, sampleRate: int, channels:int, durationSeconds: int, maxDurationSeconds: int, previousTimestamp:int) -> AudioStream: ...
 
 
 class AudioRPCService(AudioServiceBase, ResourceRPCServiceBase):

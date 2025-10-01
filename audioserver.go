@@ -10,7 +10,7 @@ import (
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/robot"
 
-	pb "github.com/oliviamiller/audioapi-poc/grpc"
+	pb "github.com/oliviamiller/audioapi-poc/grpc/audioin_api_go/grpc"
 )
 
 var API = resource.APINamespace("olivia").WithComponentType("audio")
@@ -64,8 +64,7 @@ type Properties struct {
 
 type Audio interface {
 	resource.Resource
-	Record(ctx context.Context, info AudioInfo, durationSeconds int) (<-chan *AudioChunk, error)
-	Play(ctx context.Context, audio []byte, format pb.AudioFormat, sampleRate int, channels int) error
+	GetAudio(ctx context.Context, codec string, durationSeconds float32, max_duration float32, previous_timestamp int64) (<-chan *AudioChunk, error)
 }
 
 type audioServer struct {
@@ -95,21 +94,7 @@ type wavHeader struct {
 	Subchunk2Size uint32  // Size of data
 }
 
-var PbToGoFormat = map[pb.AudioFormat]AudioFormat{
-	pb.AudioFormat_PCM16:       Pcm16,
-	pb.AudioFormat_PCM32:       Pcm32,
-	pb.AudioFormat_PCM32_FLOAT: Pcm32Float,
-	pb.AudioFormat_MP3:         Mp3,
-}
-
-var GoToPbFormat = map[AudioFormat]pb.AudioFormat{
-	Pcm16:      pb.AudioFormat_PCM16,
-	Pcm32:      pb.AudioFormat_PCM32,
-	Pcm32Float: pb.AudioFormat_PCM32_FLOAT,
-	Mp3:        pb.AudioFormat_MP3,
-}
-
-func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_RecordServer) error {
+func (s *audioServer) Record(req *pb.GetAudioRequest, stream pb.AudioService_GetAudioServer) error {
 	fmt.Printf("Starting audio recording stream for %d seconds\n", req.DurationSeconds)
 
 	// Get audio chunks from the resource
@@ -118,11 +103,7 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 		return err
 	}
 
-	chunkChan, err := a.Record(stream.Context(), AudioInfo{
-		Format:     PbToGoFormat[req.Info.Format],
-		Channels:   int(req.Info.Channels),
-		SampleRate: int(req.Info.SampleRate)},
-		int(req.DurationSeconds))
+	chunkChan, err := a.GetAudio(stream.Context(), req.Codec, req.DurationSeconds, req.MaxDurationSeconds, int64(req.PreviousTimestamp))
 	if err != nil {
 		return err
 	}
@@ -155,34 +136,34 @@ func (s *audioServer) Record(req *pb.RecordRequest, stream pb.AudioService_Recor
 	}
 }
 
-func (s *audioServer) Play(ctx context.Context, req *pb.PlayRequest) (*pb.PlayResponse, error) {
-	a, err := s.coll.Resource(req.Name)
-	if err != nil {
-		return nil, err
-	}
+// func (s *audioServer) Play(ctx context.Context, req *pb.PlayRequest) (*pb.PlayResponse, error) {
+// 	a, err := s.coll.Resource(req.Name)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	err = a.Play(ctx, req.AudioData, req.Format, int(req.SampleRate), int(req.Channels))
-	if err != nil {
-		return nil, err
-	}
-	return &pb.PlayResponse{}, nil
+// 	err = a.Play(ctx, req.AudioData, req.Format, int(req.SampleRate), int(req.Channels))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return &pb.PlayResponse{}, nil
 
-}
+// }
 
-func (s *audioServer) Properties(ctx context.Context, req *pb.PropertiesRequest) (*pb.PropertiesResponse, error) {
-	// a, err := s.coll.Resource(req.Name)
-	// if err != nil {
-	// 	return nil, err
-	// }
+// func (s *audioServer) Properties(ctx context.Context, req *pb.PropertiesRequest) (*pb.PropertiesResponse, error) {
+// 	// a, err := s.coll.Resource(req.Name)
+// 	// if err != nil {
+// 	// 	return nil, err
+// 	// }
 
-	// props, err := a.Properties(ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	return &pb.PropertiesResponse{}, nil
-	// return &pb.PropertiesResponse{SupportedFormats: props.SupportedFormats, Channels: int32(props.maxChannels)}, nil
+// 	// props, err := a.Properties(ctx)
+// 	// if err != nil {
+// 	// 	return nil, err
+// 	// }
+// 	return &pb.PropertiesResponse{}, nil
+// 	// return &pb.PropertiesResponse{SupportedFormats: props.SupportedFormats, Channels: int32(props.maxChannels)}, nil
 
-}
+// }
 
 func newServer() *audioServer {
 	return &audioServer{}
@@ -239,15 +220,15 @@ type AudioChunk struct {
 	Err       error // send errors through the channel
 }
 
-func (c *audioClient) Record(ctx context.Context, info AudioInfo, durationSeconds int) (<-chan *AudioChunk, error) {
-	stream, err := c.client.Record(ctx, &pb.RecordRequest{
-		Name:            c.name,
-		DurationSeconds: int32(durationSeconds),
-		Info: &pb.AudioInfo{
-			Format:     GoToPbFormat[info.Format],
-			SampleRate: int32(info.SampleRate),
-			Channels:   int32(info.Channels),
-		}})
+func (c *audioClient) GetAudio(ctx context.Context, codec string, durationSeconds float32, max_duration float32, previous_timestamp int64) (<-chan *AudioChunk, error) {
+	stream, err := c.client.GetAudio(ctx, &pb.GetAudioRequest{
+		Name:               c.name,
+		DurationSeconds:    durationSeconds,
+		Codec:              codec,
+		MaxDurationSeconds: max_duration,
+		PreviousTimestamp:  float32(previous_timestamp),
+	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -278,22 +259,22 @@ func (c *audioClient) Record(ctx context.Context, info AudioInfo, durationSecond
 	return ch, nil
 }
 
-func (c *audioClient) Play(ctx context.Context, audio []byte, format pb.AudioFormat, sampleRate int, channels int) error {
-	_, err := c.client.Play(ctx, &pb.PlayRequest{
-		Name:       c.name,
-		AudioData:  audio,
-		Format:     format,
-		SampleRate: int32(sampleRate),
-		Channels:   int32(channels),
-	})
+// func (c *audioClient) Play(ctx context.Context, audio []byte, format pb.AudioFormat, sampleRate int, channels int) error {
+// 	_, err := c.client.Play(ctx, &pb.PlayRequest{
+// 		Name:       c.name,
+// 		AudioData:  audio,
+// 		Format:     format,
+// 		SampleRate: int32(sampleRate),
+// 		Channels:   int32(channels),
+// 	})
 
-	if err != nil {
-		return err
-	}
+// 	if err != nil {
+// 		return err
+// 	}
 
-	return nil
+// 	return nil
 
-}
+// }
 
 // func (c *audioClient) Properties(ctx context.Context) error {
 // 	props, err := c.client.Properties(ctx, &pb.PropertiesRequest{
