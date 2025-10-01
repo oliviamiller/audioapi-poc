@@ -1,5 +1,5 @@
 [project]
-name = "audio-api"
+name = "py_audioin_api"
 version = "0.5.5"
 description = "Vviam audio api"
 authors = [
