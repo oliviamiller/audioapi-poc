@@ -1,0 +1,20 @@
+version: v1
+plugins:
+  - plugin: buf.build/protocolbuffers/python:v29.2
+    out: py_audioin_api/grpc
+  - name: grpclib_python
+    out: py_audioin_api/grpc
+  - plugin: buf.build/community/nipunn1313-mypy
+    out: py_audioin_api/grpc
+  - plugin: buf.build/protocolbuffers/go
+    out: audioin_api_go/grpc
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc/go:v1.2.0
+    out: audioin_api_go/grpc
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc-ecosystem/gateway
+    out: audioin_api_go/grpc
+    opt:
+      - paths=source_relative

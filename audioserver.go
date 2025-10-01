@@ -264,6 +264,7 @@ func (c *audioClient) Record(ctx context.Context, info AudioInfo, durationSecond
 					ch <- &AudioChunk{Err: err} // propagate error
 				}
 				fmt.Println("backgorund routine returning")
+				fmt.Println(err.Error())
 				return
 			}
 
