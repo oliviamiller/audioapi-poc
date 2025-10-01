@@ -21,7 +21,7 @@ service AudioService {
 
   message GetAudioRequest {
     string name = 1;
-    int32 duration_seconds = 2;
+    float duration_seconds = 2;
     string codec = 3;
     string request_id =4;
     float max_duration_seconds = 5;

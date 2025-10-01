@@ -85,7 +85,7 @@ func (x *AudioInfo) GetNumChannels() int32 {
 type GetAudioRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	DurationSeconds    int32                  `protobuf:"varint,2,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	DurationSeconds    float32                `protobuf:"fixed32,2,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
 	Codec              string                 `protobuf:"bytes,3,opt,name=codec,proto3" json:"codec,omitempty"`
 	RequestId          string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	MaxDurationSeconds float32                `protobuf:"fixed32,5,opt,name=max_duration_seconds,json=maxDurationSeconds,proto3" json:"max_duration_seconds,omitempty"`
@@ -131,7 +131,7 @@ func (x *GetAudioRequest) GetName() string {
 	return ""
 }
 
-func (x *GetAudioRequest) GetDurationSeconds() int32 {
+func (x *GetAudioRequest) GetDurationSeconds() float32 {
 	if x != nil {
 		return x.DurationSeconds
 	}
@@ -254,7 +254,7 @@ const file_audio_proto_rawDesc = "" +
 	"\fnum_channels\x18\x03 \x01(\x05R\vnumChannels\"\xe6\x01\n" +
 	"\x0fGetAudioRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12)\n" +
-	"\x10duration_seconds\x18\x02 \x01(\x05R\x0fdurationSeconds\x12\x14\n" +
+	"\x10duration_seconds\x18\x02 \x01(\x02R\x0fdurationSeconds\x12\x14\n" +
 	"\x05codec\x18\x03 \x01(\tR\x05codec\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\x120\n" +

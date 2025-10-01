@@ -94,7 +94,7 @@ type wavHeader struct {
 	Subchunk2Size uint32  // Size of data
 }
 
-func (s *audioServer) Record(req *pb.GetAudioRequest, stream pb.AudioService_GetAudioServer) error {
+func (s *audioServer) GetAudio(req *pb.GetAudioRequest, stream pb.AudioService_GetAudioServer) error {
 	fmt.Printf("Starting audio recording stream for %d seconds\n", req.DurationSeconds)
 
 	// Get audio chunks from the resource
