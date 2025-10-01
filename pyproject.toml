@@ -1,0 +1,17 @@
+[project]
+name = "audio-api"
+version = "0.5.5"
+description = "Vviam audio api"
+authors = [
+    {name = "Olivia Miller"},
+]
+dependencies = [
+    "viam-sdk>=0.43.0",
+]
+requires-python = ">=3.8.1"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
