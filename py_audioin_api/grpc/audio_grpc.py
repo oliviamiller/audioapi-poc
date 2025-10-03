@@ -10,7 +10,7 @@ if typing.TYPE_CHECKING:
     import grpclib.server
 
 import google.api.annotations_pb2
-import audio_pb2
+from . import audio_pb2
 
 
 class AudioServiceBase(abc.ABC):
