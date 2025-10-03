@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.api import annotations_pb2 as google_dot_api_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61udio.proto\x1a\x1cgoogle/api/annotations.proto\"e\n\tAudioInfo\x12\x14\n\x05\x63odec\x18\x01 \x01(\tR\x05\x63odec\x12\x1f\n\x0bsample_rate\x18\x02 \x01(\x05R\nsampleRate\x12!\n\x0cnum_channels\x18\x03 \x01(\x05R\x0bnumChannels\"\xe6\x01\n\x0fGetAudioRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12)\n\x10\x64uration_seconds\x18\x02 \x01(\x05R\x0f\x64urationSeconds\x12\x14\n\x05\x63odec\x18\x03 \x01(\tR\x05\x63odec\x12\x1d\n\nrequest_id\x18\x04 \x01(\tR\trequestId\x12\x30\n\x14max_duration_seconds\x18\x05 \x01(\x02R\x12maxDurationSeconds\x12-\n\x12previous_timestamp\x18\x06 \x01(\x02R\x11previousTimestamp\"\xe3\x01\n\nAudioChunk\x12\x1d\n\naudio_data\x18\x01 \x01(\x0cR\taudioData\x12\x1e\n\x04info\x18\x02 \x01(\x0b\x32\n.AudioInfoR\x04info\x12\x1a\n\x08sequence\x18\x03 \x01(\x05R\x08sequence\x12>\n\x1bstart_timestamp_nanoseconds\x18\x04 \x01(\x03R\x19startTimestampNanoseconds\x12:\n\x19\x65nd_timestamp_nanoseconds\x18\x05 \x01(\x03R\x17\x65ndTimestampNanoseconds2q\n\x0c\x41udioService\x12\x61\n\x08GetAudio\x12\x10.GetAudioRequest\x1a\x0b.AudioChunk\"4\x82\xd3\xe4\x93\x02.\",/olivia/api/v1/service/audio/{name}/GetAudio0\x01\x42\tZ\x07./audiob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61udio.proto\x1a\x1cgoogle/api/annotations.proto\"e\n\tAudioInfo\x12\x14\n\x05\x63odec\x18\x01 \x01(\tR\x05\x63odec\x12\x1f\n\x0bsample_rate\x18\x02 \x01(\x05R\nsampleRate\x12!\n\x0cnum_channels\x18\x03 \x01(\x05R\x0bnumChannels\"\xe6\x01\n\x0fGetAudioRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12)\n\x10\x64uration_seconds\x18\x02 \x01(\x02R\x0f\x64urationSeconds\x12\x14\n\x05\x63odec\x18\x03 \x01(\tR\x05\x63odec\x12\x1d\n\nrequest_id\x18\x04 \x01(\tR\trequestId\x12\x30\n\x14max_duration_seconds\x18\x05 \x01(\x02R\x12maxDurationSeconds\x12-\n\x12previous_timestamp\x18\x06 \x01(\x02R\x11previousTimestamp\"\xe3\x01\n\nAudioChunk\x12\x1d\n\naudio_data\x18\x01 \x01(\x0cR\taudioData\x12\x1e\n\x04info\x18\x02 \x01(\x0b\x32\n.AudioInfoR\x04info\x12\x1a\n\x08sequence\x18\x03 \x01(\x05R\x08sequence\x12>\n\x1bstart_timestamp_nanoseconds\x18\x04 \x01(\x03R\x19startTimestampNanoseconds\x12:\n\x19\x65nd_timestamp_nanoseconds\x18\x05 \x01(\x03R\x17\x65ndTimestampNanoseconds\"`\n\x0bPlayRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n\naudio_data\x18\x02 \x01(\x0cR\taudioData\x12\x1e\n\x04info\x18\x03 \x01(\x0b\x32\n.AudioInfoR\x04info\"\"\n\x0cPlayResponse\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"\'\n\x11PropertiesRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"\x83\x01\n\x12PropertiesResponse\x12)\n\x10supported_codecs\x18\x01 \x03(\tR\x0fsupportedCodecs\x12\x1f\n\x0bsample_rate\x18\x02 \x03(\x05R\nsampleRate\x12!\n\x0cnum_channels\x18\x03 \x01(\x05R\x0bnumChannels2\xb7\x02\n\x0c\x41udioService\x12\x61\n\x08GetAudio\x12\x10.GetAudioRequest\x1a\x0b.AudioChunk\"4\x82\xd3\xe4\x93\x02.\",/olivia/api/v1/service/audio/{name}/GetAudio0\x01\x12U\n\x04Play\x12\x0c.PlayRequest\x1a\r.PlayResponse\"0\x82\xd3\xe4\x93\x02*\"(/olivia/api/v1/service/audio/{name}/play\x12m\n\nProperties\x12\x12.PropertiesRequest\x1a\x13.PropertiesResponse\"6\x82\xd3\xe4\x93\x02\x30\"./olivia/api/v1/service/audio/{name}/propertiesB\tZ\x07./audiob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,12 +35,24 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._serialized_options = b'Z\007./audio'
   _globals['_AUDIOSERVICE'].methods_by_name['GetAudio']._loaded_options = None
   _globals['_AUDIOSERVICE'].methods_by_name['GetAudio']._serialized_options = b'\202\323\344\223\002.\",/olivia/api/v1/service/audio/{name}/GetAudio'
+  _globals['_AUDIOSERVICE'].methods_by_name['Play']._loaded_options = None
+  _globals['_AUDIOSERVICE'].methods_by_name['Play']._serialized_options = b'\202\323\344\223\002*\"(/olivia/api/v1/service/audio/{name}/play'
+  _globals['_AUDIOSERVICE'].methods_by_name['Properties']._loaded_options = None
+  _globals['_AUDIOSERVICE'].methods_by_name['Properties']._serialized_options = b'\202\323\344\223\0020\"./olivia/api/v1/service/audio/{name}/properties'
   _globals['_AUDIOINFO']._serialized_start=45
   _globals['_AUDIOINFO']._serialized_end=146
   _globals['_GETAUDIOREQUEST']._serialized_start=149
   _globals['_GETAUDIOREQUEST']._serialized_end=379
   _globals['_AUDIOCHUNK']._serialized_start=382
   _globals['_AUDIOCHUNK']._serialized_end=609
-  _globals['_AUDIOSERVICE']._serialized_start=611
-  _globals['_AUDIOSERVICE']._serialized_end=724
+  _globals['_PLAYREQUEST']._serialized_start=611
+  _globals['_PLAYREQUEST']._serialized_end=707
+  _globals['_PLAYRESPONSE']._serialized_start=709
+  _globals['_PLAYRESPONSE']._serialized_end=743
+  _globals['_PROPERTIESREQUEST']._serialized_start=745
+  _globals['_PROPERTIESREQUEST']._serialized_end=784
+  _globals['_PROPERTIESRESPONSE']._serialized_start=787
+  _globals['_PROPERTIESRESPONSE']._serialized_end=918
+  _globals['_AUDIOSERVICE']._serialized_start=921
+  _globals['_AUDIOSERVICE']._serialized_end=1232
 # @@protoc_insertion_point(module_scope)

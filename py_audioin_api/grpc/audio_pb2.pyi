@@ -4,7 +4,9 @@ isort:skip_file
 """
 
 import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.message
 import typing
 
@@ -44,7 +46,7 @@ class GetAudioRequest(google.protobuf.message.Message):
     MAX_DURATION_SECONDS_FIELD_NUMBER: builtins.int
     PREVIOUS_TIMESTAMP_FIELD_NUMBER: builtins.int
     name: builtins.str
-    duration_seconds: builtins.int
+    duration_seconds: builtins.float
     codec: builtins.str
     request_id: builtins.str
     max_duration_seconds: builtins.float
@@ -53,7 +55,7 @@ class GetAudioRequest(google.protobuf.message.Message):
         self,
         *,
         name: builtins.str = ...,
-        duration_seconds: builtins.int = ...,
+        duration_seconds: builtins.float = ...,
         codec: builtins.str = ...,
         request_id: builtins.str = ...,
         max_duration_seconds: builtins.float = ...,
@@ -92,3 +94,79 @@ class AudioChunk(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal["audio_data", b"audio_data", "end_timestamp_nanoseconds", b"end_timestamp_nanoseconds", "info", b"info", "sequence", b"sequence", "start_timestamp_nanoseconds", b"start_timestamp_nanoseconds"]) -> None: ...
 
 global___AudioChunk = AudioChunk
+
+@typing.final
+class PlayRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    AUDIO_DATA_FIELD_NUMBER: builtins.int
+    INFO_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    audio_data: builtins.bytes
+    @property
+    def info(self) -> global___AudioInfo: ...
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        audio_data: builtins.bytes = ...,
+        info: global___AudioInfo | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["info", b"info"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["audio_data", b"audio_data", "info", b"info", "name", b"name"]) -> None: ...
+
+global___PlayRequest = PlayRequest
+
+@typing.final
+class PlayResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["name", b"name"]) -> None: ...
+
+global___PlayResponse = PlayResponse
+
+@typing.final
+class PropertiesRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["name", b"name"]) -> None: ...
+
+global___PropertiesRequest = PropertiesRequest
+
+@typing.final
+class PropertiesResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SUPPORTED_CODECS_FIELD_NUMBER: builtins.int
+    SAMPLE_RATE_FIELD_NUMBER: builtins.int
+    NUM_CHANNELS_FIELD_NUMBER: builtins.int
+    num_channels: builtins.int
+    @property
+    def supported_codecs(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def sample_rate(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        supported_codecs: collections.abc.Iterable[builtins.str] | None = ...,
+        sample_rate: collections.abc.Iterable[builtins.int] | None = ...,
+        num_channels: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["num_channels", b"num_channels", "sample_rate", b"sample_rate", "supported_codecs", b"supported_codecs"]) -> None: ...
+
+global___PropertiesResponse = PropertiesResponse

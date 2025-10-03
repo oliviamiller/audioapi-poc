@@ -3,9 +3,12 @@ package audio
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
 
 	"go.viam.com/rdk/logging"
 	"go.viam.com/utils/rpc"
+	"google.golang.org/grpc"
 
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/robot"
@@ -65,6 +68,7 @@ type Properties struct {
 type Audio interface {
 	resource.Resource
 	GetAudio(ctx context.Context, codec string, durationSeconds float32, max_duration float32, previous_timestamp int64) (<-chan *AudioChunk, error)
+	Play(ctx context.Context, data []byte, codec string, sampleRate int, channels int) error
 }
 
 type audioServer struct {
@@ -136,19 +140,19 @@ func (s *audioServer) GetAudio(req *pb.GetAudioRequest, stream pb.AudioService_G
 	}
 }
 
-// func (s *audioServer) Play(ctx context.Context, req *pb.PlayRequest) (*pb.PlayResponse, error) {
-// 	a, err := s.coll.Resource(req.Name)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func (s *audioServer) Play(ctx context.Context, req *pb.PlayRequest) (*pb.PlayResponse, error) {
+	a, err := s.coll.Resource(req.Name)
+	if err != nil {
+		return nil, err
+	}
 
-// 	err = a.Play(ctx, req.AudioData, req.Format, int(req.SampleRate), int(req.Channels))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return &pb.PlayResponse{}, nil
+	err = a.Play(ctx, req.AudioData, req.Info.Codec, int(req.Info.SampleRate), int(req.Info.NumChannels))
+	if err != nil {
+		return nil, err
+	}
+	return &pb.PlayResponse{}, nil
 
-// }
+}
 
 // func (s *audioServer) Properties(ctx context.Context, req *pb.PropertiesRequest) (*pb.PropertiesResponse, error) {
 // 	// a, err := s.coll.Resource(req.Name)
@@ -259,22 +263,26 @@ func (c *audioClient) GetAudio(ctx context.Context, codec string, durationSecond
 	return ch, nil
 }
 
-// func (c *audioClient) Play(ctx context.Context, audio []byte, format pb.AudioFormat, sampleRate int, channels int) error {
-// 	_, err := c.client.Play(ctx, &pb.PlayRequest{
-// 		Name:       c.name,
-// 		AudioData:  audio,
-// 		Format:     format,
-// 		SampleRate: int32(sampleRate),
-// 		Channels:   int32(channels),
-// 	})
+func (c *audioClient) Play(ctx context.Context, audio []byte, codec string, sampleRate int, channels int) error {
 
-// 	if err != nil {
-// 		return err
-// 	}
+	info := &pb.AudioInfo{
+		Codec:       codec,
+		SampleRate:  int32(sampleRate),
+		NumChannels: int32(channels),
+	}
+	_, err := c.client.Play(ctx, &pb.PlayRequest{
+		Name:      c.name,
+		AudioData: audio,
+		Info:      info,
+	})
 
-// 	return nil
+	if err != nil {
+		return err
+	}
 
-// }
+	return nil
+
+}
 
 // func (c *audioClient) Properties(ctx context.Context) error {
 // 	props, err := c.client.Properties(ctx, &pb.PropertiesRequest{
@@ -282,20 +290,20 @@ func (c *audioClient) GetAudio(ctx context.Context, codec string, durationSecond
 // 	})
 
 // 	if err != nil {
-// 		return nil, err
+// 		return err
 // 	}
 
 // 	return props, err
 // }
 
-// func main() {
-// 	lis, err := net.Listen("tcp", "localhost:50051")
-// 	if err != nil {
-// 		log.Fatalf("failed to listen: %v", err)
-// 	}
+func main() {
+	lis, err := net.Listen("tcp", "localhost:50051")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
 
-// 	grpcServer := grpc.NewServer()
-// 	pb.RegisterAudioServiceServer(grpcServer, newServer())
-// 	fmt.Println("serving....")
-// 	grpcServer.Serve(lis)
-// }
+	grpcServer := grpc.NewServer()
+	pb.RegisterAudioServiceServer(grpcServer, newServer())
+	fmt.Println("serving....")
+	grpcServer.Serve(lis)
+}

@@ -12,6 +12,13 @@ from .grpc.audio_grpc import AudioServiceStub, AudioServiceBase
 from .grpc.audio_pb2 import (
     GetAudioRequest,
     AudioChunk,
+    PlayRequest,
+    AudioInfo,
+    PlayResponse,
+    PropertiesRequest,
+    PropertiesResponse
+
+
 )
 
 from viam.streams import StreamWithIterator
@@ -25,11 +32,21 @@ class Audio(ComponentBase):
     async def get_audio(self, format: str, sampleRate: int, channels:int, durationSeconds: int, maxDurationSeconds: int, previousTimestamp:int) -> AudioStream: ...
 
 
+    @abc.abstractmethod
+    async def play(self, audio: bytes, codec:str, sample_rate:int, channels: int): ...
+
+
 class AudioRPCService(AudioServiceBase, ResourceRPCServiceBase):
     RESOURCE_TYPE = Audio
 
     async def GetAudio(self, stream: Stream[GetAudioRequest, AudioChunk]) -> None:
         return
+
+    async def Play(self, stream: Stream[PlayRequest, PlayResponse]) -> None:
+        return
+
+    async def Properties(self, stream: Stream[PropertiesRequest, PropertiesResponse]):
+        return await super().Properties(stream)
 
 
 class AudioClient(Audio):
@@ -51,3 +68,22 @@ class AudioClient(Audio):
                     raise (e)
 
         return StreamWithIterator(read())
+
+
+    async def play(self, audio: bytes, codec: str, sample_rate: int, channels: int):
+        audio_info = AudioInfo(
+            codec=codec,
+            sample_rate=sample_rate,
+            num_channels=channels
+        )
+
+        request = PlayRequest(
+            name=self.name,
+            audio_data=audio,
+            info=audio_info
+        )
+
+        print("Sending play request with audio info")
+        await self.client.Play(request)
+
+

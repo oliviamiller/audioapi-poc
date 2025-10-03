@@ -10,13 +10,21 @@ if typing.TYPE_CHECKING:
     import grpclib.server
 
 import google.api.annotations_pb2
-from . import audio_pb2
+import audio_pb2
 
 
 class AudioServiceBase(abc.ABC):
 
     @abc.abstractmethod
     async def GetAudio(self, stream: 'grpclib.server.Stream[audio_pb2.GetAudioRequest, audio_pb2.AudioChunk]') -> None:
+        pass
+
+    @abc.abstractmethod
+    async def Play(self, stream: 'grpclib.server.Stream[audio_pb2.PlayRequest, audio_pb2.PlayResponse]') -> None:
+        pass
+
+    @abc.abstractmethod
+    async def Properties(self, stream: 'grpclib.server.Stream[audio_pb2.PropertiesRequest, audio_pb2.PropertiesResponse]') -> None:
         pass
 
     def __mapping__(self) -> typing.Dict[str, grpclib.const.Handler]:
@@ -26,6 +34,18 @@ class AudioServiceBase(abc.ABC):
                 grpclib.const.Cardinality.UNARY_STREAM,
                 audio_pb2.GetAudioRequest,
                 audio_pb2.AudioChunk,
+            ),
+            '/AudioService/Play': grpclib.const.Handler(
+                self.Play,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                audio_pb2.PlayRequest,
+                audio_pb2.PlayResponse,
+            ),
+            '/AudioService/Properties': grpclib.const.Handler(
+                self.Properties,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                audio_pb2.PropertiesRequest,
+                audio_pb2.PropertiesResponse,
             ),
         }
 
@@ -38,4 +58,16 @@ class AudioServiceStub:
             '/AudioService/GetAudio',
             audio_pb2.GetAudioRequest,
             audio_pb2.AudioChunk,
+        )
+        self.Play = grpclib.client.UnaryUnaryMethod(
+            channel,
+            '/AudioService/Play',
+            audio_pb2.PlayRequest,
+            audio_pb2.PlayResponse,
+        )
+        self.Properties = grpclib.client.UnaryUnaryMethod(
+            channel,
+            '/AudioService/Properties',
+            audio_pb2.PropertiesRequest,
+            audio_pb2.PropertiesResponse,
         )

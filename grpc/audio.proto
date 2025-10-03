@@ -4,11 +4,25 @@ option go_package = "./audio";
 import "google/api/annotations.proto";
 
 service AudioService {
+
     rpc GetAudio(GetAudioRequest) returns (stream AudioChunk) {
         option (google.api.http) = {
         post: "/olivia/api/v1/service/audio/{name}/GetAudio"
+        };
     };
+
+    rpc Play(PlayRequest) returns (PlayResponse) {
+      option (google.api.http) = {
+        post: "/olivia/api/v1/service/audio/{name}/play"
+        };
     };
+
+
+    rpc Properties(PropertiesRequest) returns (PropertiesResponse) {
+         option (google.api.http) = {
+        post: "/olivia/api/v1/service/audio/{name}/properties"
+    };
+};
 }
 
 
@@ -36,4 +50,26 @@ service AudioService {
     int64 start_timestamp_nanoseconds = 4;
     int64 end_timestamp_nanoseconds = 5;
   }
+
+
+  message PlayRequest {
+    string name = 1;
+    bytes audio_data = 2;
+    AudioInfo info = 3;
+  }
+
+  message PlayResponse {
+    string name =1;
+  }
+
+  message PropertiesRequest {
+    string name = 1;
+  }
+
+  message PropertiesResponse{
+	repeated string supported_codecs = 1;
+	repeated int32 sample_rate = 2;
+	int32 num_channels = 3;
+  }
+
 

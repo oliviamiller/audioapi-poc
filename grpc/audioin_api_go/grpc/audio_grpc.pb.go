@@ -8,7 +8,6 @@ package audio
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -24,6 +23,8 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AudioServiceClient interface {
 	GetAudio(ctx context.Context, in *GetAudioRequest, opts ...grpc.CallOption) (AudioService_GetAudioClient, error)
+	Play(ctx context.Context, in *PlayRequest, opts ...grpc.CallOption) (*PlayResponse, error)
+	Properties(ctx context.Context, in *PropertiesRequest, opts ...grpc.CallOption) (*PropertiesResponse, error)
 }
 
 type audioServiceClient struct {
@@ -66,11 +67,31 @@ func (x *audioServiceGetAudioClient) Recv() (*AudioChunk, error) {
 	return m, nil
 }
 
+func (c *audioServiceClient) Play(ctx context.Context, in *PlayRequest, opts ...grpc.CallOption) (*PlayResponse, error) {
+	out := new(PlayResponse)
+	err := c.cc.Invoke(ctx, "/AudioService/Play", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *audioServiceClient) Properties(ctx context.Context, in *PropertiesRequest, opts ...grpc.CallOption) (*PropertiesResponse, error) {
+	out := new(PropertiesResponse)
+	err := c.cc.Invoke(ctx, "/AudioService/Properties", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AudioServiceServer is the server API for AudioService service.
 // All implementations must embed UnimplementedAudioServiceServer
 // for forward compatibility
 type AudioServiceServer interface {
 	GetAudio(*GetAudioRequest, AudioService_GetAudioServer) error
+	Play(context.Context, *PlayRequest) (*PlayResponse, error)
+	Properties(context.Context, *PropertiesRequest) (*PropertiesResponse, error)
 	mustEmbedUnimplementedAudioServiceServer()
 }
 
@@ -80,6 +101,12 @@ type UnimplementedAudioServiceServer struct {
 
 func (UnimplementedAudioServiceServer) GetAudio(*GetAudioRequest, AudioService_GetAudioServer) error {
 	return status.Errorf(codes.Unimplemented, "method GetAudio not implemented")
+}
+func (UnimplementedAudioServiceServer) Play(context.Context, *PlayRequest) (*PlayResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Play not implemented")
+}
+func (UnimplementedAudioServiceServer) Properties(context.Context, *PropertiesRequest) (*PropertiesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Properties not implemented")
 }
 func (UnimplementedAudioServiceServer) mustEmbedUnimplementedAudioServiceServer() {}
 
@@ -115,13 +142,58 @@ func (x *audioServiceGetAudioServer) Send(m *AudioChunk) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _AudioService_Play_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlayRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AudioServiceServer).Play(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/AudioService/Play",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AudioServiceServer).Play(ctx, req.(*PlayRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AudioService_Properties_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PropertiesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AudioServiceServer).Properties(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/AudioService/Properties",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AudioServiceServer).Properties(ctx, req.(*PropertiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AudioService_ServiceDesc is the grpc.ServiceDesc for AudioService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var AudioService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "AudioService",
 	HandlerType: (*AudioServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Play",
+			Handler:    _AudioService_Play_Handler,
+		},
+		{
+			MethodName: "Properties",
+			Handler:    _AudioService_Properties_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "GetAudio",
